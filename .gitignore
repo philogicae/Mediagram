@@ -125,3 +125,4 @@ dmypy.json
 
 # Test
 /test
+deploy_rpi_local.sh
