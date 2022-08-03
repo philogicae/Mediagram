@@ -8,7 +8,10 @@ Made to be hosted on Raspberry Pi 4b.
 ```bash
 sudo apt update -y
 sudo apt full-upgrade -y
-sudo apt install ntfs-3g exfat-fuse exfat-utils minidlna screen -y
+sudo apt install ntfs-3g exfat-fuse exfat-utils minidlna qbittorrent-nox screen -y
+
+# Setup qbittorrent-nox:
+# https://www.linuxcapable.com/how-to-install-latest-qbittorrent-on-ubuntu-20-04-desktop-and-server/#Import_qBittorrent-nox_Stable
 ```
 
 ## Configuration
@@ -33,6 +36,11 @@ cat > .env
 # Add:
 # TELEGRAM_BOT_ID=<your bot id>
 # TELEGRAM_CHAT_ID=<your chat id>
+# DIR_PROD=<your media directory for production>
+# DIR_TEST=<your media directory for test>
+# QB_ADDR=<http://host:port>
+# QB_USER=<user_account>
+# QB_PASS=<password>
 ```
 
 ## Deploy on Raspberry Pi
@@ -46,7 +54,6 @@ cat > .env
 
 ```bash
 screen # to run in subprocess
-cd Mediagram
 pip install -U -r requirements.txt
 python main.py
 ```
