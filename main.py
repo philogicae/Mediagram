@@ -1,5 +1,6 @@
 from os import getenv, path, uname
 from subprocess import run
+from threading import Thread, Event
 from time import time as now, sleep
 from datetime import datetime as dt
 from logging import basicConfig, getLogger, INFO, DEBUG
@@ -45,6 +46,11 @@ class QBittorrent():
         logger.info("qBittorrent - connected")
         self.clean_torrents()
 
+    def close(self):
+        self.clean_torrents()
+        self.qb.logout()
+        logger.info("qBittorrent - disconnected")
+
     def stop(self):
         run('sudo systemctl stop qbittorrent-nox', shell=True)
         logger.info("qBittorrent - stopping...")
@@ -83,9 +89,9 @@ class QBittorrent():
 
     def log_torrent(self, info_hash=None):
         torrent = self.get_torrent(info_hash)
-        status = f"Status: {torrent['state']}"
+        status = f"🌊 {torrent['state'].capitalize()}"
         size = f"💾 {self.size_format(torrent['total_size']):11.11s}"
-        speed = f"🔥 {self.size_format(torrent['dlspeed'])}/s"
+        speed = f"⚡ {self.size_format(torrent['dlspeed'])}/s"
         eta = f"⏱️ {self.eta_format(torrent['eta']):11.11s}"
         progress = f"⏳ {torrent['progress'] * 100:.2f} %"
         return dict(
@@ -105,42 +111,73 @@ def mediagram():
     bot = TeleBot(token)
     bot.delete_my_commands(scope=None, language_code=None)
     bot.set_my_commands(
-        commands=[types.BotCommand("help", "Description"),
-                  types.BotCommand("alive", "HealthCheck"),
-                  types.BotCommand("list", "File list of files (TODO)"),
-                  types.BotCommand("delete", "Delete file(s) (TODO)"),
-                  types.BotCommand("stop", "KillSwitch"),
-                  types.BotCommand("restart", "Restart")])
+        commands=[types.BotCommand("help", "📝 Description"),
+                  types.BotCommand("alive", "⚪ HealthCheck"),
+                  types.BotCommand("list", "🔍 List media files [TODO]"),
+                  types.BotCommand("delete", "❌ Delete file(s) [TODO]"),
+                  types.BotCommand("stop", "🔴 Kill the bot"),
+                  types.BotCommand("restart", "🔵 Restart the bot")])
     started = dt.fromtimestamp(now()).strftime("%Y-%m-%d %H:%M:%S")
-    bot.send_message(chat_id, f"Started.")
+    signal = Event()
+    signal.set()
+    threads = []
+    bot.send_message(chat_id, f"🟢 Started.")
     logger.info("Mediagram - initialized")
 
     @bot.message_handler(commands=['start', 'alive'])
     def alive(message):
         if message.chat.id == chat_id:
-            bot.send_message(chat_id, f"Started at {started}\nRunning...")
+            bot.send_message(chat_id, f"⏰ Started at {started}\n🟢 Running...")
             logger.info(message.text)
 
     @bot.message_handler(commands=['stop', 'restart'])
     def kill(message):
         if message.chat.id == chat_id:
-            global dead
             if message.text == '/stop':
-                bot.send_message(chat_id, f"Stopped.")
+                global dead
+                dead = True
+                bot.send_message(chat_id, "🟠 Stopping... ")
             else:
-                bot.send_message(chat_id, f"Restarting...")
-                dead = False
+                bot.send_message(chat_id, "🔵 Restarting... ")
             logger.info(message.text)
+            signal.clear()
+            for thread in threads:
+                thread.join()
+            bot.stop_polling()
+            qb.close()
             if is_rpi:
                 qb.stop()
-            bot.stop_polling()
+            logger.info("Mediagram - shutdown")
+            bot.send_message(chat_id, "🔴 Shutdown.")
 
     @bot.message_handler(commands=['help'])
     def help(message):
         if message.chat.id == chat_id:
             bot.send_message(
-                chat_id, f"Send a .torrent file or a magnet link to download it on your Raspberry Pi.")
+                chat_id, f"📝 Send a .torrent file or a magnet link to download it on your Raspberry Pi.")
             logger.info(message.text)
+
+    def download_manager(torrent_type, signal):
+        info = qb.log_torrent()
+        name, info_hash = info['name'], info['hash']
+        logger.info(f"/download: '{name}'")
+        base = f"🌍 {name}\n🔥 {torrent_type} processed\n"
+        msg = bot.send_message(chat_id, f"{base}{info['details']}")
+        while signal.is_set() and not info['done']:
+            sleep(1)
+            new_info = qb.log_torrent(info_hash)
+            if info != new_info:
+                info = new_info
+                bot.edit_message_text(
+                    f"{base}{info['details']}", chat_id, msg.id)
+        qb.delete_torrent(info_hash)
+        if info['done']:
+            bot.edit_message_text(
+                f"{base}{info['details']} - Done!", chat_id, msg.id)
+            logger.info(f"/done: '{name}'")
+        else:
+            run(f'sudo rm -r {repo}{name}', shell=True)
+            logger.info(f"/aborted: '{name}'")
 
     @bot.message_handler(func=lambda message: message.document.mime_type == 'application/x-bittorrent', content_types=['document'])
     def upload_torrent_file(message):
@@ -153,7 +190,10 @@ def mediagram():
                 logger.info(
                     f"/upload_torrent_file: '{message.document.file_name}'")
                 qb.download_from_torrent_file(torrent)
-                download_manager("Torrent file")
+                thread = Thread(target=download_manager,
+                                args=("Torrent file", signal))
+                thread.start()
+                threads.append(thread)
 
     @bot.message_handler(func=lambda message: message.text.startswith('magnet:?xt='), content_types=['text'])
     def upload_magnet_link(message):
@@ -163,30 +203,14 @@ def mediagram():
             else:
                 logger.info(f"/upload_magnet_link: '{message.text}'")
                 qb.download_from_magnet_link(message.text)
-                download_manager("Magnet link")
+                thread = Thread(target=download_manager,
+                                args=("Magnet link", signal))
+                thread.start()
+                threads.append(thread)
 
-    def download_manager(torrent_type):
-        info = qb.log_torrent()
-        name, info_hash = info['name'], info['hash']
-        logger.info(f"/download: '{name}'")
-        base = f"Torrent: {name}\n{torrent_type} processed.\n"
-        msg = bot.send_message(chat_id, f"{base}{info['details']}")
-        while not info['done']:
-            sleep(3)
-            new_info = qb.log_torrent(info_hash)
-            if info != new_info:
-                info = new_info
-                bot.edit_message_text(
-                    f"{base}{info['details']}", chat_id, msg.id)
-        qb.delete_torrent(info_hash)
-        bot.edit_message_text(
-            f"{base}{info['details']} - Done!", chat_id, msg.id)
-        logger.info(f"/done: '{name}'")
-
-    bot.infinity_polling(skip_pending=True)
+    bot.polling(skip_pending=True)
 
 
 if __name__ == '__main__':
     while not dead:
-        dead = True
         mediagram()
