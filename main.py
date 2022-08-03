@@ -56,19 +56,24 @@ class QBittorrent():
             b /= factor
         return f"{b:.2f} Y{suffix}"
 
+    def eta_format(self, eta):
+        if eta > 24 * 60 * 60:
+            return f"23:59:59"
+        h = eta // 3600
+        m = (eta % 3600) // 60
+        s = eta % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
     def download_from_torrent_file(self, torrent):
         self.qb.download_from_file(torrent)
 
     def download_from_magnet_link(self, magnet):
         self.qb.download_from_link(magnet)
 
-    def get_torrents(self):
-        return self.qb.torrents()
-
-    def get_torrent(self, info_hash):
-        for t in self.get_torrents():
-            if t['hash'] == info_hash:
-                return t
+    def get_torrent(self, info_hash=None):
+        if info_hash is None:
+            return sorted(self.qb.torrents(), key=lambda x: x['added_on'], reverse=True)[0]
+        return self.qb.torrents(info_hash=info_hash)[0]
 
     def clean_torrents(self):
         self.qb.delete_all_permanently()
@@ -76,14 +81,17 @@ class QBittorrent():
     def delete_torrent(self, info_hash):
         self.qb.delete(info_hash)
 
-    def log_torrent(self, info_hash):
+    def log_torrent(self, info_hash=None):
         torrent = self.get_torrent(info_hash)
-        size = f"Size: {self.size_format(torrent['total_size'])}"
-        speed = f"Speed: {self.size_format(torrent['dlspeed'])}/s"
-        progress = f"Progress: {torrent['progress'] * 100:.2f} %"
+        status = f"Status: {torrent['state']}"
+        size = f"💾 {self.size_format(torrent['total_size']):11.11s}"
+        speed = f"🔥 {self.size_format(torrent['dlspeed'])}/s"
+        eta = f"⏱️ {self.eta_format(torrent['eta']):11.11s}"
+        progress = f"⏳ {torrent['progress'] * 100:.2f} %"
         return dict(
             name=torrent['name'],
-            details=f"{size}\n{speed}\n{progress}",
+            hash=torrent['hash'],
+            details=f"{status}\n{size} {speed}\n{eta} {progress}",
             done=torrent['progress'] == 1
         )
 
@@ -119,9 +127,9 @@ def mediagram():
             global dead
             if message.text == '/stop':
                 bot.send_message(chat_id, f"Stopped.")
-                dead = True
             else:
                 bot.send_message(chat_id, f"Restarting...")
+                dead = False
             logger.info(message.text)
             if is_rpi:
                 qb.stop()
@@ -145,7 +153,7 @@ def mediagram():
                 logger.info(
                     f"/upload_torrent_file: '{message.document.file_name}'")
                 qb.download_from_torrent_file(torrent)
-                download_manager(message, "Torrent file")
+                download_manager("Torrent file")
 
     @bot.message_handler(func=lambda message: message.text.startswith('magnet:?xt='), content_types=['text'])
     def upload_magnet_link(message):
@@ -155,25 +163,24 @@ def mediagram():
             else:
                 logger.info(f"/upload_magnet_link: '{message.text}'")
                 qb.download_from_magnet_link(message.text)
-                download_manager(message, "Magnet link")
+                download_manager("Magnet link")
 
-    def download_manager(src_message, torrent_type):
-        info_hash = qb.get_torrents()[0]['hash']
-        info = qb.log_torrent(info_hash)
-        name = info['name']
+    def download_manager(torrent_type):
+        info = qb.log_torrent()
+        name, info_hash = info['name'], info['hash']
         logger.info(f"/download: '{name}'")
-        uploaded = f"Torrent: {name}\n{torrent_type} uploaded.\nStart downloading...\n"
-        msg = bot.reply_to(src_message, f"{uploaded}{info['details']}")
+        base = f"Torrent: {name}\n{torrent_type} processed.\n"
+        msg = bot.send_message(chat_id, f"{base}{info['details']}")
         while not info['done']:
-            sleep(1)
+            sleep(3)
             new_info = qb.log_torrent(info_hash)
             if info != new_info:
                 info = new_info
                 bot.edit_message_text(
-                    f"{uploaded}{info['details']}", chat_id, msg.id)
+                    f"{base}{info['details']}", chat_id, msg.id)
         qb.delete_torrent(info_hash)
         bot.edit_message_text(
-            f"{uploaded}{info['details']} - Done!", chat_id, msg.id)
+            f"{base}{info['details']} - Done!", chat_id, msg.id)
         logger.info(f"/done: '{name}'")
 
     bot.infinity_polling(skip_pending=True)
@@ -181,4 +188,5 @@ def mediagram():
 
 if __name__ == '__main__':
     while not dead:
+        dead = True
         mediagram()
