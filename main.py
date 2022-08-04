@@ -3,7 +3,7 @@ from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
 from datetime import datetime as dt
-from logging import basicConfig, getLogger, INFO, DEBUG
+from logging import basicConfig, getLogger, INFO
 from telebot import TeleBot, types
 from qbittorrent import Client
 from dotenv import load_dotenv
@@ -28,8 +28,7 @@ started = False
 killed = False
 
 # Logs
-basicConfig(format="%(asctime)s - %(levelname)s - %(message)s",
-            level=INFO if is_rpi else DEBUG)
+basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=INFO)
 logger = getLogger(__name__)
 
 
@@ -48,6 +47,7 @@ class QBittorrent():
         self.clean_torrents()
 
     def close(self):
+        self.clean_torrents()
         self.qb.logout()
         logger.info("qBittorrent - disconnected")
 
@@ -77,9 +77,12 @@ class QBittorrent():
         self.qb.download_from_link(magnet)
 
     def get_torrent(self, info_hash=None):
-        if info_hash is None:
-            return sorted(self.qb.torrents(), key=lambda x: x['added_on'], reverse=True)[0]
-        return self.qb.torrents(info_hash=info_hash)[0]
+        torrents = None
+        if info_hash:
+            torrents = self.qb.torrents(info_hash=info_hash)
+        else:
+            torrents = self.qb.torrents(sort='added_on')
+        return torrents[-1] if torrents else None
 
     def clean_torrents(self):
         self.qb.delete_all_permanently()
@@ -89,17 +92,18 @@ class QBittorrent():
 
     def log_torrent(self, info_hash=None):
         torrent = self.get_torrent(info_hash)
-        status = f"🌊 {torrent['state'].capitalize()}"
-        size = f"💾 {self.size_format(torrent['total_size']):11.11s}"
-        speed = f"⚡ {self.size_format(torrent['dlspeed'])}/s"
-        eta = f"⏱️ {self.eta_format(torrent['eta']):11.11s}"
-        progress = f"⏳ {torrent['progress'] * 100:.2f} %"
-        return dict(
-            name=torrent['name'],
-            hash=torrent['hash'],
-            details=f"{status}\n{size} {speed}\n{eta} {progress}",
-            done=torrent['progress'] == 1
-        )
+        if torrent:
+            status = f"🌊 {torrent['state'].capitalize()}"
+            size = f"💾 {self.size_format(torrent['total_size']):11.11s}"
+            speed = f"⚡ {self.size_format(torrent['dlspeed'])}/s"
+            eta = f"⏱️ {self.eta_format(torrent['eta']):11.11s}"
+            progress = f"⏳ {torrent['progress'] * 100:.2f} %"
+            return dict(
+                name=torrent['name'],
+                hash=torrent['hash'],
+                details=f"{status}\n{size} {speed}\n{eta} {progress}",
+                done=torrent['progress'] == 1
+            )
 
 
 def mediagram():
@@ -161,6 +165,9 @@ def mediagram():
 
     def download_manager(torrent_type, signal):
         info = qb.log_torrent()
+        if not info:
+            logger.info("Mediagram - torrent not found during init")
+            return
         name, info_hash = info['name'], info['hash']
         logger.info(f"/download: '{name}'")
         base = f"🌐 {name}\n🔥 {torrent_type} processed\n"
@@ -168,7 +175,10 @@ def mediagram():
         while signal.is_set() and not info['done']:
             sleep(2)
             new_info = qb.log_torrent(info_hash)
-            if info != new_info:
+            if not new_info:
+                logger.info("Mediagram - torrent not found during loop")
+                return
+            elif info != new_info:
                 info = new_info
                 bot.edit_message_text(
                     f"{base}{info['details']}", chat_id, msg.id)
@@ -189,7 +199,7 @@ def mediagram():
             if not path.exists(repo):
                 logger.error(f"Missing directory: '{repo}'")
             elif not signal.is_set():
-                logger.info(f"/download-blocked - {'Torrent file'}")
+                logger.info(f"/download-blocked - Torrent file")
             else:
                 logger.info(
                     f"/upload_torrent_file: '{message.document.file_name}'")
@@ -205,7 +215,7 @@ def mediagram():
             if not path.exists(repo):
                 logger.error(f"Missing directory: '{repo}'")
             elif not signal.is_set():
-                logger.info(f"/download-blocked - {'Magnet link'}")
+                logger.info(f"/download-blocked - Magnet link")
             else:
                 logger.info(f"/upload_magnet_link: '{message.text}'")
                 qb.download_from_magnet_link(message.text)
