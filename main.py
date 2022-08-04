@@ -24,7 +24,8 @@ is_rpi = uname().machine == 'aarch64'
 if is_rpi:
     run('cd / && ./media/refresh.sh', shell=True)
     repo = dir_prod
-dead = False
+started = False
+killed = False
 
 # Logs
 basicConfig(format="%(asctime)s - %(levelname)s - %(message)s",
@@ -47,7 +48,6 @@ class QBittorrent():
         self.clean_torrents()
 
     def close(self):
-        self.clean_torrents()
         self.qb.logout()
         logger.info("qBittorrent - disconnected")
 
@@ -109,14 +109,16 @@ def mediagram():
     qb.init()
 
     bot = TeleBot(token)
-    bot.delete_my_commands(scope=None, language_code=None)
-    bot.set_my_commands(
-        commands=[types.BotCommand("help", "📝 Description"),
-                  types.BotCommand("alive", "⚪ HealthCheck"),
-                  types.BotCommand("list", "🔍 List media files [TODO]"),
-                  types.BotCommand("delete", "❌ Delete file(s) [TODO]"),
-                  types.BotCommand("stop", "🔴 Kill the bot"),
-                  types.BotCommand("restart", "🔵 Restart the bot")])
+    global started
+    if not started:
+        bot.set_my_commands(
+            commands=[types.BotCommand("help", "📝 Description"),
+                      types.BotCommand("alive", "⚪ HealthCheck"),
+                      types.BotCommand("list", "🔍 List media files [TODO]"),
+                      types.BotCommand("srt", "👓 Add .srt for a file [TODO]"),
+                      types.BotCommand("delete", "❌ Delete file(s) [TODO]"),
+                      types.BotCommand("stop", "🔴 Kill the bot"),
+                      types.BotCommand("restart", "🔵 Restart the bot")])
     started = dt.fromtimestamp(now()).strftime("%Y-%m-%d %H:%M:%S")
     signal = Event()
     signal.set()
@@ -134,8 +136,8 @@ def mediagram():
     def kill(message):
         if message.chat.id == chat_id:
             if message.text == '/stop':
-                global dead
-                dead = True
+                global killed
+                killed = True
                 bot.send_message(chat_id, "🟠 Stopping... ")
             else:
                 bot.send_message(chat_id, "🔵 Restarting... ")
@@ -147,8 +149,8 @@ def mediagram():
             qb.close()
             if is_rpi:
                 qb.stop()
-            logger.info("Mediagram - shutdown")
             bot.send_message(chat_id, "🔴 Shutdown.")
+            logger.info("Mediagram - shutdown")
 
     @bot.message_handler(commands=['help'])
     def help(message):
@@ -161,10 +163,10 @@ def mediagram():
         info = qb.log_torrent()
         name, info_hash = info['name'], info['hash']
         logger.info(f"/download: '{name}'")
-        base = f"🌍 {name}\n🔥 {torrent_type} processed\n"
+        base = f"🌐 {name}\n🔥 {torrent_type} processed\n"
         msg = bot.send_message(chat_id, f"{base}{info['details']}")
         while signal.is_set() and not info['done']:
-            sleep(1)
+            sleep(2)
             new_info = qb.log_torrent(info_hash)
             if info != new_info:
                 info = new_info
@@ -172,11 +174,11 @@ def mediagram():
                     f"{base}{info['details']}", chat_id, msg.id)
         qb.delete_torrent(info_hash)
         if info['done']:
-            bot.edit_message_text(
-                f"{base}{info['details']} - Done!", chat_id, msg.id)
+            bot.send_message(chat_id, f"🌐 {name}\n✅ Completed. Ready to play!")
             logger.info(f"/done: '{name}'")
         else:
             run(f'sudo rm -r {repo}{name}', shell=True)
+            bot.send_message(chat_id, f"🌐 {name}\n🚫 Aborted.")
             logger.info(f"/aborted: '{name}'")
 
     @bot.message_handler(func=lambda message: message.document.mime_type == 'application/x-bittorrent', content_types=['document'])
@@ -186,6 +188,8 @@ def mediagram():
             torrent = bot.download_file(file_info.file_path)
             if not path.exists(repo):
                 logger.error(f"Missing directory: '{repo}'")
+            elif not signal.is_set():
+                logger.info(f"/download-blocked - {'Torrent file'}")
             else:
                 logger.info(
                     f"/upload_torrent_file: '{message.document.file_name}'")
@@ -200,6 +204,8 @@ def mediagram():
         if message.chat.id == chat_id:
             if not path.exists(repo):
                 logger.error(f"Missing directory: '{repo}'")
+            elif not signal.is_set():
+                logger.info(f"/download-blocked - {'Magnet link'}")
             else:
                 logger.info(f"/upload_magnet_link: '{message.text}'")
                 qb.download_from_magnet_link(message.text)
@@ -212,5 +218,9 @@ def mediagram():
 
 
 if __name__ == '__main__':
-    while not dead:
-        mediagram()
+    while not killed:
+        try:
+            mediagram()
+        except KeyboardInterrupt:
+            killed = True
+            logger.info("Mediagram - killed by KeyboardInterrupt")
