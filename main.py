@@ -1,9 +1,10 @@
-from os import getenv, path, uname
+from os import getenv, uname, path, listdir, remove
+from shutil import rmtree
 from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
 from datetime import datetime as dt
-from logging import basicConfig, getLogger, INFO
+from logging import basicConfig, getLogger, INFO, DEBUG
 from telebot import TeleBot, types
 from qbittorrent import Client
 from dotenv import load_dotenv
@@ -20,15 +21,17 @@ qb_pass = getenv("QB_PASS")
 
 # Platform
 repo = dir_test
+log_mode = DEBUG
 is_rpi = uname().machine == 'aarch64'
 if is_rpi:
     run('cd / && ./media/refresh.sh', shell=True)
     repo = dir_prod
+    log_mode = INFO
 started = False
 killed = False
 
 # Logs
-basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=INFO)
+basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=log_mode)
 logger = getLogger(__name__)
 
 
@@ -76,13 +79,17 @@ class QBittorrent():
     def download_from_magnet_link(self, magnet):
         self.qb.download_from_link(magnet)
 
-    def get_torrent(self, info_hash=None):
-        torrents = None
+    def get_torrent(self, info_hash=None, name=None, new=False):
         if info_hash:
-            torrents = self.qb.torrents(info_hash=info_hash)
-        else:
-            torrents = self.qb.torrents(sort='added_on')
-        return torrents[-1] if torrents else None
+            for t in self.qb.torrents():
+                if t['hash'] == info_hash:
+                    return t
+        elif name:
+            for t in self.qb.torrents():
+                if t['name'] == name:
+                    return t
+        elif new:
+            return self.qb.torrents(sort='added_on')[-1]
 
     def clean_torrents(self):
         self.qb.delete_all_permanently()
@@ -90,8 +97,8 @@ class QBittorrent():
     def delete_torrent(self, info_hash):
         self.qb.delete(info_hash)
 
-    def log_torrent(self, info_hash=None):
-        torrent = self.get_torrent(info_hash)
+    def log_torrent(self, info_hash=None, name=None, new=False):
+        torrent = self.get_torrent(info_hash=info_hash, name=name, new=new)
         if torrent:
             status = f"🌊 {torrent['state'].capitalize()}"
             size = f"💾 {self.size_format(torrent['total_size']):11.11s}"
@@ -117,23 +124,23 @@ def mediagram():
     if not started:
         bot.set_my_commands(
             commands=[types.BotCommand("help", "📝 Description"),
-                      types.BotCommand("alive", "⚪ HealthCheck"),
-                      types.BotCommand("list", "🔍 List media files [TODO]"),
-                      types.BotCommand("srt", "👓 Add .srt for a file [TODO]"),
-                      types.BotCommand("delete", "❌ Delete file(s) [TODO]"),
+                      types.BotCommand("alive", "⚪ Health check"),
+                      types.BotCommand("list", "🔍 List files"),
+                      types.BotCommand("delete", "❌ Delete file(s)"),
                       types.BotCommand("stop", "🔴 Kill the bot"),
                       types.BotCommand("restart", "🔵 Restart the bot")])
-    started = dt.fromtimestamp(now()).strftime("%Y-%m-%d %H:%M:%S")
+    started = dt.fromtimestamp(now()).strftime("%Y-%m-%d  -  %H:%M:%S")
     signal = Event()
     signal.set()
     threads = []
-    bot.send_message(chat_id, f"🟢 Started.")
+    bot.send_message(chat_id, "🟢 Started.")
     logger.info("Mediagram - initialized")
 
     @bot.message_handler(commands=['start', 'alive'])
     def alive(message):
         if message.chat.id == chat_id:
-            bot.send_message(chat_id, f"⏰ Started at {started}\n🟢 Running...")
+            bot.send_message(
+                chat_id, f"⏰ Started at:\n{started}\n🟢 Running...")
             logger.info(message.text)
 
     @bot.message_handler(commands=['stop', 'restart'])
@@ -142,9 +149,9 @@ def mediagram():
             if message.text == '/stop':
                 global killed
                 killed = True
-                bot.send_message(chat_id, "🟠 Stopping... ")
+                bot.send_message(chat_id, "🟠 Stopping...")
             else:
-                bot.send_message(chat_id, "🔵 Restarting... ")
+                bot.send_message(chat_id, "🔵 Restarting...")
             logger.info(message.text)
             signal.clear()
             for thread in threads:
@@ -160,36 +167,47 @@ def mediagram():
     def help(message):
         if message.chat.id == chat_id:
             bot.send_message(
-                chat_id, f"📝 Send a .torrent file or a magnet link to download it on your Raspberry Pi.")
+                chat_id, "📝 Send a .torrent file or a magnet link to download it on your Raspberry Pi.")
             logger.info(message.text)
 
+    def delete_file(name):
+        file = path.join(repo, name)
+        if path.isfile(file):
+            remove(file)
+            return True
+        elif path.isdir(file):
+            rmtree(file)
+            return True
+        return False
+
     def download_manager(torrent_type, signal):
-        info = qb.log_torrent()
-        if not info:
-            logger.info("Mediagram - torrent not found during init")
-            return
-        name, info_hash = info['name'], info['hash']
-        logger.info(f"/download: '{name}'")
+        info = qb.log_torrent(new=True)
+        file, name, info_hash = info['name'], info['name'].capitalize(
+        ), info['hash']
+        logger.info(f"/download: '{file}'")
         base = f"🌐 {name}\n🔥 {torrent_type} processed\n"
         msg = bot.send_message(chat_id, f"{base}{info['details']}")
         while signal.is_set() and not info['done']:
             sleep(2)
-            new_info = qb.log_torrent(info_hash)
+            new_info = qb.log_torrent(info_hash=info_hash)
             if not new_info:
-                logger.info("Mediagram - torrent not found during loop")
+                delete_file(file)
+                bot.edit_message_text(
+                    f"{base}🚫 Aborted.", chat_id, msg.id)
+                logger.info(f"/aborted: '{file}'")
                 return
-            elif info != new_info:
+            if info != new_info:
                 info = new_info
                 bot.edit_message_text(
                     f"{base}{info['details']}", chat_id, msg.id)
         qb.delete_torrent(info_hash)
         if info['done']:
             bot.send_message(chat_id, f"🌐 {name}\n✅ Completed. Ready to play!")
-            logger.info(f"/done: '{name}'")
+            logger.info(f"/done: '{file}'")
         else:
-            run(f'sudo rm -r {repo}{name}', shell=True)
-            bot.send_message(chat_id, f"🌐 {name}\n🚫 Aborted.")
-            logger.info(f"/aborted: '{name}'")
+            delete_file(file)
+            bot.edit_message_text(f"{base}🚫 Aborted.", chat_id, msg.id)
+            logger.info(f"/aborted: '{file}'")
 
     @bot.message_handler(func=lambda message: message.document.mime_type == 'application/x-bittorrent', content_types=['document'])
     def upload_torrent_file(message):
@@ -199,11 +217,12 @@ def mediagram():
             if not path.exists(repo):
                 logger.error(f"Missing directory: '{repo}'")
             elif not signal.is_set():
-                logger.info(f"/download-blocked - Torrent file")
+                logger.info("/download-blocked - Torrent file")
             else:
                 logger.info(
                     f"/upload_torrent_file: '{message.document.file_name}'")
                 qb.download_from_torrent_file(torrent)
+                bot.delete_message(chat_id, message.message_id)
                 thread = Thread(target=download_manager,
                                 args=("Torrent file", signal))
                 thread.start()
@@ -215,14 +234,58 @@ def mediagram():
             if not path.exists(repo):
                 logger.error(f"Missing directory: '{repo}'")
             elif not signal.is_set():
-                logger.info(f"/download-blocked - Magnet link")
+                logger.info("/download-blocked - Magnet link")
             else:
                 logger.info(f"/upload_magnet_link: '{message.text}'")
                 qb.download_from_magnet_link(message.text)
+                bot.delete_message(chat_id, message.message_id)
                 thread = Thread(target=download_manager,
                                 args=("Magnet link", signal))
                 thread.start()
                 threads.append(thread)
+
+    def list_repo():
+        ignored = ['System Volume Information']
+        return sorted([f"🌐 {f[:22].capitalize()}" for f in listdir(repo) if f not in ignored])
+
+    @bot.message_handler(commands=['list'])
+    def list_files(message):
+        if message.chat.id == chat_id:
+            files = '\n'.join(list_repo())
+            bot.send_message(chat_id, f"💾 Available files 💾\n\n{files}")
+            logger.info(message.text)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('🌐') or call.data == 'Cancel')
+    def callback_delete(call):
+        if call.message.chat.id == chat_id:
+            if call.data == 'Cancel':
+                bot.delete_message(chat_id, call.message.message_id)
+                logger.info(f"/cancel_delete")
+                return
+            file = [f for f in listdir(
+                repo) if f.capitalize().startswith(call.data[2:])][0]
+            torrent = qb.get_torrent(name=file)
+            if torrent:
+                qb.delete_torrent(torrent['hash'])
+                bot.edit_message_text(
+                    f"🌐 {file.capitalize()}\n🚫 Aborted.", chat_id, call.message.message_id)
+            elif delete_file(file):
+                bot.edit_message_text(
+                    f"🌐 {file.capitalize()}\n🗑 Deleted.", chat_id, call.message.message_id)
+                logger.info(f"/deleted: '{file}'")
+
+    @bot.message_handler(commands=['delete'])
+    def delete(message):
+        if message.chat.id == chat_id:
+            markup = types.InlineKeyboardMarkup()
+            for file in list_repo():
+                markup.add(types.InlineKeyboardButton(
+                    file, callback_data=file))
+            markup.add(types.InlineKeyboardButton(
+                'Cancel', callback_data='Cancel'))
+            bot.send_message(
+                chat_id, "❌ Available files to delete ❌", reply_markup=markup)
+            logger.info(message.text)
 
     bot.polling(skip_pending=True)
 
