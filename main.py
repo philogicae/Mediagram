@@ -202,7 +202,8 @@ def mediagram():
                     f"{base}{info['details']}", chat_id, msg.id)
         qb.delete_torrent(info_hash)
         if info['done']:
-            bot.send_message(chat_id, f"🌐 {name}\n✅ Completed. Ready to play!")
+            bot.delete_message(chat_id, msg.id)
+            bot.send_message(chat_id, f"{base}✅ Completed. Ready to play!")
             logger.info(f"/done: '{file}'")
         else:
             delete_file(file)
@@ -252,7 +253,8 @@ def mediagram():
     def list_files(message):
         if message.chat.id == chat_id:
             files = '\n'.join(list_repo())
-            bot.send_message(chat_id, f"💾 Available files 💾\n\n{files}")
+            bot.send_message(
+                chat_id, f"💾 Available files 💾\n\n{files}", disable_web_page_preview=True)
             logger.info(message.text)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('🌐') or call.data == 'Cancel')
