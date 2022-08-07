@@ -51,11 +51,11 @@ class QBittorrent():
 
     def close(self):
         self.clean_torrents()
-        self.qb.logout()
+        # self.qb.logout()
         logger.info("qBittorrent - disconnected")
 
     def stop(self):
-        run('sudo systemctl stop qbittorrent-nox', shell=True)
+        self.qb.shutdown()
         logger.info("qBittorrent - stopping...")
 
     def size_format(self, b, factor=1024, suffix="o"):
@@ -246,7 +246,7 @@ def mediagram():
                 threads.append(thread)
 
     def list_repo():
-        ignored = ['System Volume Information']
+        ignored = ['System Volume Information', '$RECYCLE.BIN']
         return sorted([f"🌐 {f[:22].capitalize()}" for f in listdir(repo) if f not in ignored])
 
     @bot.message_handler(commands=['list'])
