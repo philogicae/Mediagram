@@ -101,14 +101,16 @@ class QBittorrent():
         torrent = self.get_torrent(info_hash=info_hash, name=name, new=new)
         if torrent:
             status = f"🌊 {torrent['state'].capitalize()}"
-            size = f"💾 {self.size_format(torrent['total_size']):11.11s}"
+            seeders = f"🔗 {torrent['num_seeds']} ({torrent['num_complete']})"
+            leechers = f"👤 {torrent['num_leechs']} ({torrent['num_incomplete']})"
+            size = f"💾 {self.size_format(torrent['total_size'])}"
             speed = f"⚡ {self.size_format(torrent['dlspeed'])}/s"
-            eta = f"⏱️ {self.eta_format(torrent['eta']):11.11s}"
+            eta = f"⏱️ {self.eta_format(torrent['eta'])}"
             progress = f"⏳ {torrent['progress'] * 100:.2f} %"
             return dict(
                 name=torrent['name'],
                 hash=torrent['hash'],
-                details=f"{status}\n{size} {speed}\n{eta} {progress}",
+                details=f"{status}\n{seeders:15.15s}{leechers}\n{size:15.15s}{speed}\n{eta:15.15s}{progress}",
                 done=torrent['progress'] == 1
             )
 
@@ -176,7 +178,7 @@ def mediagram():
             remove(file)
             return True
         elif path.isdir(file):
-            rmtree(file)
+            rmtree(file, ignore_errors=True)
             return True
         return False
 
