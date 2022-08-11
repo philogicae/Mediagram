@@ -1,5 +1,5 @@
 from os import getenv, uname, path, listdir, remove
-from shutil import rmtree
+from shutil import rmtree, disk_usage
 from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
@@ -275,6 +275,11 @@ def mediagram():
                 thread.start()
                 threads.append(thread)
 
+    def get_disk_stats():
+        usage = disk_usage(repo)
+        total, used, free = [f'{v / 2**30:.1f}' for v in usage]
+        return f"📦 {used} / {total} Go 🟰 {free} Go 🚥"
+
     def list_repo():
         ignored = ['System Volume Information', '$RECYCLE.BIN']
         return sorted([f"🌐 {f[:22].capitalize()}" for f in listdir(repo) if f not in ignored])
@@ -284,7 +289,7 @@ def mediagram():
         if message.chat.id == chat_id:
             files = '\n'.join(list_repo())
             bot.send_message(
-                chat_id, f"💾 Available files 💾\n\n{files}", disable_web_page_preview=True)
+                chat_id, f"💾 Available files 💾\n{get_disk_stats()}\n\n{files}", disable_web_page_preview=True)
             logger.info(message.text)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('🌐') or call.data == 'Cancel')
@@ -316,7 +321,7 @@ def mediagram():
             markup.add(types.InlineKeyboardButton(
                 'Cancel', callback_data='Cancel'))
             bot.send_message(
-                chat_id, "❌ Available files to delete ❌", reply_markup=markup)
+                chat_id, f"❌ Available files to delete ❌\n{get_disk_stats()}", reply_markup=markup)
             logger.info(message.text)
 
     bot.infinity_polling(skip_pending=True)
