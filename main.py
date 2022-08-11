@@ -35,6 +35,30 @@ basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=log_mode)
 logger = getLogger(__name__)
 
 
+def singleton(class_):
+    instances = {}
+
+    def getinstance(*args, **kwargs):
+        if class_ not in instances:
+            instances[class_] = class_(*args, **kwargs)
+        return instances[class_]
+    return getinstance
+
+
+@singleton
+class SafeRequest:
+    delay = 0.2
+    timestamp = 0
+
+    @staticmethod
+    def release():
+        SafeRequest.timestamp = now()
+
+    @staticmethod
+    def is_releasable():
+        return SafeRequest.timestamp + SafeRequest.delay < now()
+
+
 class QBittorrent():
     qb = None
 
@@ -191,17 +215,21 @@ def mediagram():
         msg = bot.send_message(chat_id, f"{base}{info['details']}")
         while signal.is_set() and not info['done']:
             sleep(2)
-            new_info = qb.log_torrent(info_hash=info_hash)
-            if not new_info:
-                delete_file(file)
-                bot.edit_message_text(
-                    f"{base}🚫 Aborted.", chat_id, msg.id)
-                logger.info(f"/aborted: '{file}'")
-                return
-            if info != new_info:
-                info = new_info
-                bot.edit_message_text(
-                    f"{base}{info['details']}", chat_id, msg.id)
+            released = False
+            while not released:
+                new_info = qb.log_torrent(info_hash=info_hash)
+                if SafeRequest.is_releasable():
+                    if not new_info:
+                        delete_file(file)
+                        bot.edit_message_text(
+                            f"{base}🚫 Aborted.", chat_id, msg.id)
+                        logger.info(f"/aborted: '{file}'")
+                        return
+                    if info != new_info:
+                        info = new_info
+                        bot.edit_message_text(
+                            f"{base}{info['details']}", chat_id, msg.id)
+                    released = SafeRequest.release()
         qb.delete_torrent(info_hash)
         if info['done']:
             bot.delete_message(chat_id, msg.id)
@@ -291,7 +319,7 @@ def mediagram():
                 chat_id, "❌ Available files to delete ❌", reply_markup=markup)
             logger.info(message.text)
 
-    bot.polling(skip_pending=True)
+    bot.infinity_polling(skip_pending=True)
 
 
 if __name__ == '__main__':
