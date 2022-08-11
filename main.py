@@ -324,7 +324,8 @@ def mediagram():
                 chat_id, f"❌ Available files to delete ❌\n{get_disk_stats()}", reply_markup=markup)
             logger.info(message.text)
 
-    bot.infinity_polling(skip_pending=True)
+    bot.infinity_polling(skip_pending=True, timeout=200,
+                         long_polling_timeout=200)
 
 
 if __name__ == '__main__':
