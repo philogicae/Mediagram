@@ -5,6 +5,7 @@ from threading import Thread, Event
 from time import time as now, sleep
 from datetime import datetime as dt
 from logging import basicConfig, getLogger, INFO, DEBUG
+from rich.logging import RichHandler
 from telebot import TeleBot, types
 from qbittorrent import Client
 from dotenv import load_dotenv
@@ -21,18 +22,21 @@ qb_pass = getenv("QB_PASS")
 
 # Platform
 repo = dir_test
-log_mode = DEBUG
+LOG_MODE = DEBUG
 is_rpi = uname().machine == 'aarch64'
 if is_rpi:
     run('cd / && ./media/refresh.sh', shell=True)
     repo = dir_prod
-    log_mode = INFO
+    LOG_MODE = INFO
 started = False
 killed = False
 
 # Logs
-basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=log_mode)
-logger = getLogger(__name__)
+basicConfig(format="%(message)s",
+            datefmt="[%Y-%m-%d %X]",
+            level=LOG_MODE,
+            handlers=[RichHandler()])
+logger = getLogger("rich")
 
 
 def singleton(class_):
