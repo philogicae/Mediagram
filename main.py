@@ -97,6 +97,9 @@ class QBittorrent():
     def download_from_magnet_link(self, magnet):
         self.qb.download_from_link(magnet)
 
+    def only_sequential(self, info_hash):
+        self.qb.toggle_sequential_download(info_hash)
+
     def get_torrent(self, info_hash=None, name=None, new=False):
         if info_hash:
             for t in self.qb.torrents():
@@ -204,6 +207,7 @@ def mediagram():
         info = qb.log_torrent(new=True)
         file, name, info_hash = info['name'], info['name'].capitalize(
         ), info['hash']
+        qb.only_sequential(info_hash)
         logger.info(f"/download: '{file}'")
         base = f"🌐 {name}\n🔥 {torrent_type} processed\n"
         msg = bot.send_message(chat_id, f"{base}{info['details']}")
