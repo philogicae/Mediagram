@@ -14,9 +14,9 @@ sudo apt install ntfs-3g exfat-fuse exfat-utils minidlna qbittorrent-nox screen 
 ## Storage / Media server
 
 ```bash
-sudo mkdir /media/usb
-sudo bash -c "echo 'media_dir=/media/usb' > /etc/minidlna.conf"
-sudo bash -c "echo 'sudo service minidlna force-reload && echo \"/media/usb: refresh.\"' > /media/refresh.sh"
+sudo mkdir /media
+sudo bash -c "echo 'media_dir=/media' > /etc/minidlna.conf"
+sudo bash -c "echo 'sudo service minidlna force-reload && echo \"/media: refresh.\"' > /media/refresh.sh"
 sudo chmod +x /media/refresh.sh
 
 # [Optional] To add the script as a command:

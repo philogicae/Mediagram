@@ -92,10 +92,10 @@ class QBittorrent():
         return f"{h:02d}:{m:02d}:{s:02d}"
 
     def download_from_torrent_file(self, torrent):
-        self.qb.download_from_file(torrent)
+        self.qb.download_from_file(torrent, save_path=repo)
 
     def download_from_magnet_link(self, magnet):
-        self.qb.download_from_link(magnet)
+        self.qb.download_from_link(magnet, save_path=repo)
 
     def only_sequential(self, info_hash):
         self.qb.toggle_sequential_download(info_hash)
