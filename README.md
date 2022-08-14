@@ -18,7 +18,8 @@ sudo mkdir /media
 sudo bash -c "echo 'friendly_name=Mediagram
 media_dir=/media
 port=8200
-root_container=B' > /etc/minidlna.conf"
+root_container=B
+notify_interval=60' > /etc/minidlna.conf"
 sudo bash -c "echo 'sudo service minidlna force-reload && echo \"/media: refresh.\"' > /media/refresh.sh"
 sudo chmod +x /media/refresh.sh
 
