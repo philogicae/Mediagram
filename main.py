@@ -99,6 +99,7 @@ class QBittorrent():
 
     def only_sequential(self, info_hash):
         self.qb.toggle_sequential_download(info_hash)
+        self.qb.toggle_first_last_piece_priority(info_hash)
 
     def get_torrent(self, info_hash=None, name=None, new=False):
         if info_hash:
