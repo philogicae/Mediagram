@@ -1,4 +1,6 @@
 python-dotenv
 pytelegrambotapi
 python-qbittorrent
+python-opensubtitles
+rarbgapi
 rich

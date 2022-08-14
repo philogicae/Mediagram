@@ -112,8 +112,10 @@ TELEGRAM_CHAT_ID=<your-chat-id>
 DIR_PROD=<your-storage-directory-for-production>
 DIR_TEST=<your-storage-directory-for-test>
 QB_ADDR=<http://host:port>
-QB_USER=<user-account>
+QB_USER=<qbittorrent-account>
 QB_PASS=<password>
+OST_USER=<opensubtitles-account>
+OST_PASS=<password>
 ```
 
 ## Run
