@@ -25,7 +25,7 @@ repo = dir_test
 LOG_MODE = DEBUG
 is_rpi = uname().machine == 'aarch64'
 if is_rpi:
-    run('cd / && ./media/refresh.sh', shell=True)
+    run('/media/refresh.sh', shell=True)
     repo = dir_prod
     LOG_MODE = INFO
 started = False
