@@ -10,14 +10,14 @@ class SubtitlesSearch:
     def query(self, query, lang='fre'):
         subtitles = self.api.search_subtitles(
             [{'query': query, 'sublanguageid': lang}])
-        filtered = [dict(
+        remap = lambda sub: dict(
             id=sub['IDSubtitleFile'],
             name=sub['MovieReleaseName'],
             nb_downloads=int(sub['SubDownloadsCnt']),
             lang=sub['SubLanguageID'],
-            ext=sub['SubFormat']
-        ) for sub in subtitles]
-        return sorted(filtered, key=lambda sub: sub['nb_downloads'], reverse=True)[:10]
+            ext=sub['SubFormat'])
+        remapped = list(map(remap, subtitles))
+        return sorted(remapped, key=lambda sub: sub['nb_downloads'], reverse=True)[:10]
 
     def download(self, sub, name, path):
         ids, names = [sub['id']], {sub['id']: f"{name}.{sub['ext']}"}
@@ -30,12 +30,18 @@ class TorrentSearch:
     def __init__(self):
         self.api = RarbgAPI()
 
-    def query(self, query):
+    def query(self, query, min_seeders=5, max_results=10):
         torrents = self.api.search(
-            search_string=query, extended_response=True, sort='seeders', categories=self.CATEGORIES)
-        return [dict(
+            search_string=query, extended_response=True, sort='seeders', categories=self.CATEGORIES, limit=25)
+        filt = lambda t: t.seeders > min_seeders
+        remap = lambda t: dict(
             name=t.filename,
-            peers=f'{t.seeders}/{t.leechers}',
-            size=f'{t.size / 2**30:.2f} Go',
-            magnet=t.download
-        ) for t in torrents if t.seeders > 1][:10]
+            seeders=t.seeders,
+            leechers=t.leechers,
+            size=round(t.size / 2**30, 2),
+            category=t.category,
+            date=t.pubdate[:-6],
+            magnet=t.download)
+        filtered = filter(filt, torrents)
+        remapped = list(map(remap, filtered))
+        return remapped[:max_results]
