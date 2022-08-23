@@ -7,7 +7,7 @@ class SubtitlesSearch:
         self.api = OpenSubtitles()
         self.api.login(user, password)
 
-    def query(self, query, lang='fre'):
+    def query(self, query, lang='fre', max_results=5):
         subtitles = self.api.search_subtitles(
             [{'query': query, 'sublanguageid': lang}])
         remap = lambda sub: dict(
@@ -17,7 +17,7 @@ class SubtitlesSearch:
             lang=sub['SubLanguageID'],
             ext=sub['SubFormat'])
         remapped = list(map(remap, subtitles))
-        return sorted(remapped, key=lambda sub: sub['nb_downloads'], reverse=True)[:10]
+        return sorted(remapped, key=lambda sub: sub['nb_downloads'], reverse=True)[:max_results]
 
     def download(self, sub, name, path):
         ids, names = [sub['id']], {sub['id']: f"{name}.{sub['ext']}"}
@@ -30,9 +30,9 @@ class TorrentSearch:
     def __init__(self):
         self.api = RarbgAPI()
 
-    def query(self, query, min_seeders=5, max_results=10):
+    def query(self, query, min_seeders=5, max_results=5):
         torrents = self.api.search(
-            search_string=query, extended_response=True, sort='seeders', categories=self.CATEGORIES, limit=25)
+            search_string=query, extended_response=True, sort='seeders', categories=self.CATEGORIES, limit=10)
         filt = lambda t: t.seeders > min_seeders
         remap = lambda t: dict(
             name=t.filename,
