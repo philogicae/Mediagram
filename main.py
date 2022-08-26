@@ -8,6 +8,7 @@ from logging import basicConfig, getLogger, INFO, DEBUG
 from rich.logging import RichHandler
 from telebot import TeleBot, types
 from qbittorrent import Client
+from plugins import TorrentSearch
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -149,6 +150,7 @@ def mediagram():
         bot.set_my_commands(
             commands=[types.BotCommand("help", "📝 Description"),
                       types.BotCommand("alive", "⚪ Health check"),
+                      types.BotCommand("download", "🎬 Download"),
                       types.BotCommand("list", "🔍 List files"),
                       types.BotCommand("delete", "❌ Delete file(s)"),
                       types.BotCommand("stop", "🔴 Kill the bot"),
@@ -157,6 +159,7 @@ def mediagram():
     signal = Event()
     signal.set()
     threads = []
+    id_stack, id_magnet = [], {}
     bot.send_message(chat_id, "🟢 Started.")
     logger.info("Mediagram - initialized")
 
@@ -193,6 +196,15 @@ def mediagram():
             bot.send_message(
                 chat_id, "📝 Send a .torrent file or a magnet link to download it on your Raspberry Pi.")
             logger.info(message.text)
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'Cancel')
+    def cancel(call):
+        if call.message.chat.id == chat_id:
+            nonlocal id_stack, id_magnet
+            for _, id in id_stack:
+                bot.delete_message(chat_id, id)
+            id_stack, id_magnet = [], {}
+            logger.info("/cancel")
 
     def delete_file(name):
         file = path.join(repo, name)
@@ -252,7 +264,7 @@ def mediagram():
                 logger.info(
                     f"/upload_torrent_file: '{message.document.file_name}'")
                 qb.download_from_torrent_file(torrent)
-                bot.delete_message(chat_id, message.message_id)
+                bot.delete_message(chat_id, message.id)
                 thread = Thread(target=download_manager,
                                 args=("Torrent file", signal))
                 thread.start()
@@ -268,7 +280,7 @@ def mediagram():
             else:
                 logger.info(f"/upload_magnet_link: '{message.text}'")
                 qb.download_from_magnet_link(message.text)
-                bot.delete_message(chat_id, message.message_id)
+                bot.delete_message(chat_id, message.id)
                 thread = Thread(target=download_manager,
                                 args=("Magnet link", signal))
                 thread.start()
@@ -291,24 +303,22 @@ def mediagram():
                 chat_id, f"💾 Available files 💾\n{get_disk_stats()}\n\n{files}", disable_web_page_preview=True)
             logger.info(message.text)
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('🌐') or call.data == 'Cancel')
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('🌐'))
     def callback_delete(call):
         if call.message.chat.id == chat_id:
-            if call.data == 'Cancel':
-                bot.delete_message(chat_id, call.message.message_id)
-                logger.info(f"/cancel_delete")
-                return
             file = [f for f in listdir(
                 repo) if f.capitalize().startswith(call.data[2:])][0]
             torrent = qb.get_torrent(name=file)
             if torrent:
                 qb.delete_torrent(torrent['hash'])
                 bot.edit_message_text(
-                    f"🌐 {file.capitalize()}\n🚫 Aborted.", chat_id, call.message.message_id)
+                    f"🌐 {file.capitalize()}\n🚫 Aborted.", chat_id, call.message.id)
             elif delete_file(file):
                 bot.edit_message_text(
-                    f"🌐 {file.capitalize()}\n🗑 Deleted.", chat_id, call.message.message_id)
+                    f"🌐 {file.capitalize()}\n🗑 Deleted.", chat_id, call.message.id)
                 logger.info(f"/deleted: '{file}'")
+            nonlocal id_stack
+            id_stack = []
 
     @bot.message_handler(commands=['delete'])
     def delete(message):
@@ -319,8 +329,10 @@ def mediagram():
                     file, callback_data=file))
             markup.add(types.InlineKeyboardButton(
                 'Cancel', callback_data='Cancel'))
-            bot.send_message(
+            msg = bot.send_message(
                 chat_id, f"❌ Available files to delete ❌\n{get_disk_stats()}", reply_markup=markup)
+            id_stack.append(('delete_init', message.id))
+            id_stack.append(('delete_select', msg.id))
             logger.info(message.text)
 
     try:
