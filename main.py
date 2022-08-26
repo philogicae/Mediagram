@@ -148,11 +148,11 @@ def mediagram():
     global started
     if not started:
         bot.set_my_commands(
-            commands=[types.BotCommand("help", "📝 Description"),
-                      types.BotCommand("alive", "⚪ Health check"),
-                      types.BotCommand("download", "🎬 Download"),
+            commands=[types.BotCommand("download", "🎬 Download"),
                       types.BotCommand("list", "🔍 List files"),
                       types.BotCommand("delete", "❌ Delete file(s)"),
+                      types.BotCommand("help", "📝 Description"),
+                      types.BotCommand("alive", "⚪ Health check"),
                       types.BotCommand("stop", "🔴 Kill the bot"),
                       types.BotCommand("restart", "🔵 Restart the bot")])
     started = dt.fromtimestamp(now()).strftime("%Y-%m-%d  -  %H:%M:%S")
@@ -289,7 +289,7 @@ def mediagram():
     @bot.callback_query_handler(func=lambda call: call.data in ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'])
     def callback_select(call):
         if call.message.chat.id == chat_id:
-            logger.info(f"/selected: '{call.data}'")
+            logger.info(f"/selected: {call.data}")
             if not signal.is_set():
                 logger.info("/download-blocked - Magnet link")
             else:
