@@ -286,6 +286,75 @@ def mediagram():
                 thread.start()
                 threads.append(thread)
 
+    @bot.callback_query_handler(func=lambda call: call.data in ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'])
+    def callback_select(call):
+        if call.message.chat.id == chat_id:
+            logger.info(f"/selected: '{call.data}'")
+            if not signal.is_set():
+                logger.info("/download-blocked - Magnet link")
+            else:
+                nonlocal id_stack, id_magnet
+                magnet = id_magnet[call.data]
+                logger.info(f"/retrieved_magnet_link: '{magnet}'")
+                qb.download_from_magnet_link(magnet)
+                for _, id in id_stack[1:]:
+                    bot.delete_message(chat_id, id)
+                id_stack, id_magnet = [], {}
+                thread = Thread(target=download_manager,
+                                args=("Magnet link", signal))
+                thread.start()
+                threads.append(thread)
+
+    @bot.message_handler(func=lambda m: not list(filter(lambda x: m.text.startswith(x), ['/', 'magnet:?xt=', '🌐'])), content_types=['text'])
+    def torrent_select(message):
+        if message.chat.id == chat_id:
+            logger.info(f"/request: '{message.text}'")
+            searcher = TorrentSearch()
+            retry = 0
+            while retry < 3:
+                retry += 1
+                torrents = searcher.query(message.text)
+                if torrents:
+                    break
+            nonlocal id_stack
+            id_stack.append(('download_reply', message.id))
+            if not torrents:
+                bot.send_message(chat_id, f"🚫 No result for: {message.text}")
+                for _, id in id_stack[1:]:
+                    bot.delete_message(chat_id, id)
+                id_stack = []
+                logger.info("/no_result")
+            else:
+                text = f"⛳️ Results for: {message.text}\n"
+                markup = types.InlineKeyboardMarkup()
+                row = []
+                nonlocal id_magnet
+                for i, t in zip(['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'], torrents):
+                    text += f"\n{i} {t['name']}\n💾 {t['size']} Go 🔗 {t['seeders']} 👤 {t['leechers']}\n⏰ {t['date']}\n"
+                    row.append(types.InlineKeyboardButton(i, callback_data=i))
+                    id_magnet[i] = t['magnet']
+                markup.row(*row)
+                markup.add(types.InlineKeyboardButton(
+                    'Cancel', callback_data='Cancel'))
+                msg = bot.send_message(chat_id, text, reply_markup=markup)
+                id_stack.append(('download_choose', msg.id))
+                logger.info("/torrent_select")
+
+    @bot.message_handler(commands=['download'])
+    def downloader(message):
+        if message.chat.id == chat_id:
+            if not path.exists(repo):
+                logger.error(f"Missing directory: '{repo}'")
+            else:
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(
+                    'Cancel', callback_data='Cancel'))
+                msg = bot.send_message(chat_id, f"Enter filename:",
+                                       reply_markup=markup)
+                id_stack.append(('download_init', message.id))
+                id_stack.append(('download_enter', msg.id))
+                logger.info("/downloader")
+
     def get_disk_stats():
         usage = disk_usage(repo)
         total, used, free = [f'{v / 2**30:.1f}' for v in usage]
