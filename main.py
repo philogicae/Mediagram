@@ -428,19 +428,25 @@ def mediagram():
             else:
                 file = path.join(repo, buffer)
                 if path.isdir(file):
-                    filename = buffer
-                    filepath = file
+                    filepath, filename, size = file, '', 0
+                    for f in listdir(filepath):
+                        s = path.getsize(path.join(filepath, f))
+                        if s > size:
+                            filename, size = f, s
+                    if size == 0:
+                        text = f"🚫 Empty directory error for: {buffer}"
+                        logger.info(
+                            f"/subtitles_empty_directory_error: {sub_info}")
                 else:
-                    filename = buffer[:-4]
-                    filepath = repo
+                    filepath, filename = repo, buffer[:-4]
                 sub = subtitles[0]
                 sub_info = {lang: filename}
                 if searcher.download(sub, filename, filepath):
                     text = f"✅ Subtitles added for: {filename}"
                     logger.info(f"/subtitles_added: {sub_info}")
                 else:
-                    text = f"🚫 Subtitles error for: {filename}"
-                    logger.info(f"/subtitles_error: {sub_info}")
+                    text = f"🚫 Download error for: {filename}"
+                    logger.info(f"/subtitles_download_error: {sub_info}")
             id_stack, file_buffer = [], ''
             bot.edit_message_text(text, chat_id, subtitles_interface)
 
