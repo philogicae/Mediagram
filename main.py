@@ -8,7 +8,7 @@ from logging import basicConfig, getLogger, INFO, DEBUG
 from rich.logging import RichHandler
 from telebot import TeleBot, types
 from qbittorrent import Client
-from plugins import TorrentSearch
+from plugins import TorrentSearch, SubtitlesSearch
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -20,6 +20,8 @@ dir_test = getenv("DIR_TEST")
 qb_addr = getenv("QB_ADDR")
 qb_user = getenv("QB_USER")
 qb_pass = getenv("QB_PASS")
+ost_user = getenv("OST_USER")
+ost_pass = getenv("OST_PASS")
 
 # Platform
 repo = dir_test
@@ -149,6 +151,7 @@ def mediagram():
     if not started:
         bot.set_my_commands(
             commands=[types.BotCommand("download", "🎬 Download"),
+                      types.BotCommand("subtitles", "💬 Add subtitles"),
                       types.BotCommand("list", "🔍 List files"),
                       types.BotCommand("delete", "❌ Delete file(s)"),
                       types.BotCommand("help", "📝 Description"),
@@ -159,7 +162,7 @@ def mediagram():
     signal = Event()
     signal.set()
     threads = []
-    id_stack, id_magnet = [], {}
+    id_stack, id_magnet, file_buffer = [], {}, ''
     bot.send_message(chat_id, "🟢 Started.")
     logger.info("Mediagram - initialized")
 
@@ -200,10 +203,10 @@ def mediagram():
     @bot.callback_query_handler(func=lambda call: call.data == 'Cancel')
     def cancel(call):
         if call.message.chat.id == chat_id:
-            nonlocal id_stack, id_magnet
+            nonlocal id_stack, id_magnet, file_buffer
             for _, id in id_stack:
                 bot.delete_message(chat_id, id)
-            id_stack, id_magnet = [], {}
+            id_stack, id_magnet, file_buffer = [], {}, ''
             logger.info("/cancel")
 
     def delete_file(name):
@@ -305,7 +308,7 @@ def mediagram():
                 thread.start()
                 threads.append(thread)
 
-    @bot.message_handler(func=lambda m: not list(filter(lambda x: m.text.startswith(x), ['/', 'magnet:?xt=', '🌐'])), content_types=['text'])
+    @bot.message_handler(func=lambda m: not list(filter(lambda x: m.text.startswith(x), ['/', 'magnet:?xt=', '🌐', '💬', '🔈'])), content_types=['text'])
     def torrent_select(message):
         if message.chat.id == chat_id:
             logger.info(f"/request: '{message.text}'")
@@ -360,14 +363,14 @@ def mediagram():
         total, used, free = [f'{v / 2**30:.1f}' for v in usage]
         return f"📦 {used} / {total} Go 🟰 {free} Go 🚥"
 
-    def list_repo():
+    def list_repo(symbol):
         ignored = ['System Volume Information', '$RECYCLE.BIN']
-        return sorted([f"🌐 {f[:22].capitalize()}" for f in listdir(repo) if f not in ignored])
+        return sorted([f"{symbol} {f[:32].capitalize()}" for f in listdir(repo) if f not in ignored and not f.endswith('.srt')])
 
     @bot.message_handler(commands=['list'])
     def list_files(message):
         if message.chat.id == chat_id:
-            files = '\n'.join(list_repo())
+            files = '\n'.join(list_repo('🌐'))
             bot.send_message(
                 chat_id, f"💾 Available files 💾\n{get_disk_stats()}\n\n{files}", disable_web_page_preview=True)
             logger.info(message.text)
@@ -393,7 +396,7 @@ def mediagram():
     def delete(message):
         if message.chat.id == chat_id:
             markup = types.InlineKeyboardMarkup()
-            for file in list_repo():
+            for file in list_repo('🌐'):
                 markup.add(types.InlineKeyboardButton(
                     file, callback_data=file))
             markup.add(types.InlineKeyboardButton(
@@ -402,6 +405,78 @@ def mediagram():
                 chat_id, f"❌ Available files to delete ❌\n{get_disk_stats()}", reply_markup=markup)
             id_stack.append(('delete_init', message.id))
             id_stack.append(('delete_select', msg.id))
+            logger.info(message.text)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('🔈'))
+    def callback_sub_download(call):
+        if call.message.chat.id == chat_id:
+            nonlocal id_stack, file_buffer
+            subtitles_interface, buffer = id_stack[-1][1], file_buffer
+            lang = call.data[1:]
+            logger.info(f"/selected_language: {lang}")
+            searcher = SubtitlesSearch(ost_user, ost_pass)
+            retry = 0
+            while retry < 3:
+                retry += 1
+                subtitles = searcher.query(buffer, lang)
+                if subtitles:
+                    break
+            if not subtitles:
+                text = f"🚫 No result for: {buffer}"
+                sub_info = {lang: buffer}
+                logger.info(f"/no_subtitles_found: {sub_info}")
+            else:
+                file = path.join(repo, buffer)
+                if path.isdir(file):
+                    filename = buffer
+                    filepath = file
+                else:
+                    filename = buffer[:-4]
+                    filepath = repo
+                sub = subtitles[0]
+                sub_info = {lang: filename}
+                if searcher.download(sub, filename, filepath):
+                    text = f"✅ Subtitles added for: {filename}"
+                    logger.info(f"/subtitles_added: {sub_info}")
+                else:
+                    text = f"🚫 Subtitles error for: {filename}"
+                    logger.info(f"/subtitles_error: {sub_info}")
+            id_stack, file_buffer = [], ''
+            bot.edit_message_text(text, chat_id, subtitles_interface)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('💬'))
+    def callback_sub_lang(call):
+        if call.message.chat.id == chat_id:
+            nonlocal file_buffer
+            file_buffer = [f for f in listdir(
+                repo) if f.capitalize().startswith(call.data[2:])][0]
+            logger.info(f"/selected_for_subtitles: {file_buffer}")
+            text = f"🔈 Select language for: {file_buffer}"
+            markup = types.InlineKeyboardMarkup()
+            row = []
+            for lang, data in [('🇺🇸 English', '🔈eng'), ('🇫🇷 French', '🔈fre')]:
+                row.append(types.InlineKeyboardButton(
+                    lang, callback_data=data))
+            markup.row(*row)
+            markup.add(types.InlineKeyboardButton(
+                'Cancel', callback_data='Cancel'))
+            bot.edit_message_text(
+                text, chat_id, id_stack[-1][1], reply_markup=markup)
+            logger.info('/subtitles_lang')
+
+    @bot.message_handler(commands=['subtitles'])
+    def subtitles(message):
+        if message.chat.id == chat_id:
+            markup = types.InlineKeyboardMarkup()
+            for file in list_repo('💬'):
+                markup.add(types.InlineKeyboardButton(
+                    file, callback_data=file))
+            markup.add(types.InlineKeyboardButton(
+                'Cancel', callback_data='Cancel'))
+            msg = bot.send_message(
+                chat_id, f"🪄 Add subtitles for:", reply_markup=markup)
+            id_stack.append(('subtitles_init', message.id))
+            id_stack.append(('subtitles_interface', msg.id))
             logger.info(message.text)
 
     try:
