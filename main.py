@@ -438,10 +438,10 @@ def mediagram():
                         logger.info(
                             f"/subtitles_empty_directory_error: {sub_info}")
                 else:
-                    filepath, filename = repo, buffer[:-4]
+                    filepath, filename = repo, buffer
                 sub = subtitles[0]
                 sub_info = {lang: filename}
-                if searcher.download(sub, filename, filepath):
+                if searcher.download(sub, filename[:-4], filepath):
                     text = f"✅ Subtitles added for: {filename}"
                     logger.info(f"/subtitles_added: {sub_info}")
                 else:
