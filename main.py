@@ -156,6 +156,7 @@ def mediagram():
                       types.BotCommand("delete", "❌ Delete file(s)"),
                       types.BotCommand("help", "📝 Description"),
                       types.BotCommand("alive", "⚪ Health check"),
+                      types.BotCommand("force", "♻️ Force media refresh"),
                       types.BotCommand("stop", "🔴 Kill the bot"),
                       types.BotCommand("restart", "🔵 Restart the bot")])
     started = dt.fromtimestamp(now()).strftime("%Y-%m-%d  -  %H:%M:%S")
@@ -172,6 +173,13 @@ def mediagram():
             bot.send_message(
                 chat_id, f"⏰ Started at:\n{started}\n🟢 Running...")
             logger.info(message.text)
+
+    @bot.message_handler(commands=['force'])
+    def force(message):
+        if message.chat.id == chat_id:
+            run('/media/refresh.sh', shell=True)
+            bot.send_message(chat_id, "♻️ Force media refresh: Done.")
+            logger.info("/force: media-refresh")
 
     @bot.message_handler(commands=['stop', 'restart'])
     def kill(message):
