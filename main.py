@@ -219,8 +219,11 @@ def mediagram():
 
     def delete_file(name):
         file = path.join(repo, name)
+        srt = file[:-3] + 'srt'
         if path.isfile(file):
             remove(file)
+            if path.isfile(srt):
+                remove(srt)
             return True
         elif path.isdir(file):
             rmtree(file, ignore_errors=True)
