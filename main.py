@@ -432,6 +432,7 @@ def mediagram():
                 subtitles = searcher.query(buffer, lang)
                 if subtitles:
                     break
+                sleep(1)
             if not subtitles:
                 text = f"🚫 No result for: {buffer}"
                 sub_info = {lang: buffer}

@@ -10,14 +10,15 @@ class SubtitlesSearch:
     def query(self, query, lang='fre', max_results=5):
         subtitles = self.api.search_subtitles(
             [{'query': query, 'sublanguageid': lang}])
-        remap = lambda sub: dict(
-            id=sub['IDSubtitleFile'],
-            name=sub['MovieReleaseName'],
-            nb_downloads=int(sub['SubDownloadsCnt']),
-            lang=sub['SubLanguageID'],
-            ext=sub['SubFormat'])
-        remapped = list(map(remap, subtitles))
-        return sorted(remapped, key=lambda sub: sub['nb_downloads'], reverse=True)[:max_results]
+        if subtitles:
+            remap = lambda sub: dict(
+                id=sub['IDSubtitleFile'],
+                name=sub['MovieReleaseName'],
+                nb_downloads=int(sub['SubDownloadsCnt']),
+                lang=sub['SubLanguageID'],
+                ext=sub['SubFormat'])
+            remapped = list(map(remap, subtitles))
+            return sorted(remapped, key=lambda sub: sub['nb_downloads'], reverse=True)[:max_results]
 
     def download(self, sub, name, path):
         ids, names = [sub['id']], {sub['id']: f"{name}.{sub['ext']}"}
