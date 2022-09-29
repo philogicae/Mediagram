@@ -23,7 +23,7 @@ class SubtitlesSearch:
 
     def download(self, sub, name, path):
         id, name = [sub['id']], {
-            sub['id']: f"{name}.{sub['lang']}.{sub['ext']}"}
+            sub['id']: f"{name}.{sub['ext']}"}
         return self.api.download_subtitles(id, name, path, extension=sub['ext'])
 
 
@@ -45,7 +45,7 @@ class SubtitlesSearchV2:
             return list(map(remap, subtitles[:max_results]))
 
     def download(self, sub, name, path):
-        id, name = sub['id'], f"{name}.{sub['lang']}.{sub['ext']}"
+        id, name = sub['id'], f"{name}.{sub['ext']}"
         return self.api.download_subtitle(id, name, path)
 
 
