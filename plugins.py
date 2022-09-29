@@ -38,12 +38,11 @@ class SubtitlesSearchV2:
         if subtitles:
             remap = lambda sub: dict(
                 id=sub['attributes']['files'][0]['file_id'],
-                name=sub['attributes']['files'][0]['file_name'][:-4],
+                name=sub['attributes']['release'],
                 nb_downloads=sub['attributes']['download_count'],
                 lang=sub['attributes']['language'],
-                ext=sub['attributes']['files'][0]['file_name'][-3:])
-            remapped = list(map(remap, subtitles))
-            return remapped[:max_results]
+                ext=sub['attributes']['files'][0]['file_name'][-3:] if sub['attributes']['files'][0]['file_name'] else 'srt')
+            return list(map(remap, subtitles[:max_results]))
 
     def download(self, sub, name, path):
         id, name = sub['id'], f"{name}.{sub['lang']}.{sub['ext']}"
