@@ -1,4 +1,5 @@
 from pythonopensubtitles.opensubtitles import OpenSubtitles
+from opensubtitles_v2 import OpenSubtitlesV2
 from rarbgapi import RarbgAPI
 
 
@@ -15,14 +16,38 @@ class SubtitlesSearch:
                 id=sub['IDSubtitleFile'],
                 name=sub['MovieReleaseName'],
                 nb_downloads=int(sub['SubDownloadsCnt']),
-                lang=sub['SubLanguageID'],
+                lang=sub['SubLanguageID'][:2],
                 ext=sub['SubFormat'])
             remapped = list(map(remap, subtitles))
             return sorted(remapped, key=lambda sub: sub['nb_downloads'], reverse=True)[:max_results]
 
     def download(self, sub, name, path):
-        ids, names = [sub['id']], {sub['id']: f"{name}.{sub['ext']}"}
-        return self.api.download_subtitles(ids, names, path, extension=sub['ext'])
+        id, name = [sub['id']], {
+            sub['id']: f"{name}.{sub['lang']}.{sub['ext']}"}
+        return self.api.download_subtitles(id, name, path, extension=sub['ext'])
+
+
+class SubtitlesSearchV2:
+    def __init__(self, user, password, apikey):
+        self.api = OpenSubtitlesV2()
+        self.api.login(user, password, apikey)
+
+    def query(self, query, lang='fre', max_results=5):
+        lang = lang[:2]
+        subtitles = self.api.search_subtitles(query, lang)
+        if subtitles:
+            remap = lambda sub: dict(
+                id=sub['attributes']['files'][0]['file_id'],
+                name=sub['attributes']['files'][0]['file_name'][:-4],
+                nb_downloads=sub['attributes']['download_count'],
+                lang=sub['attributes']['language'],
+                ext=sub['attributes']['files'][0]['file_name'][-3:])
+            remapped = list(map(remap, subtitles))
+            return remapped[:max_results]
+
+    def download(self, sub, name, path):
+        id, name = sub['id'], f"{name}.{sub['lang']}.{sub['ext']}"
+        return self.api.download_subtitle(id, name, path)
 
 
 class TorrentSearch:

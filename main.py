@@ -8,7 +8,7 @@ from logging import basicConfig, getLogger, INFO, DEBUG
 from rich.logging import RichHandler
 from telebot import TeleBot, types
 from qbittorrent import Client
-from plugins import TorrentSearch, SubtitlesSearch
+from plugins import TorrentSearch, SubtitlesSearchV2
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -22,6 +22,7 @@ qb_user = getenv("QB_USER")
 qb_pass = getenv("QB_PASS")
 ost_user = getenv("OST_USER")
 ost_pass = getenv("OST_PASS")
+ost_apikey = getenv("OST_API_KEY")
 
 # Platform
 repo = dir_test
@@ -376,7 +377,7 @@ def mediagram():
 
     def list_repo(symbol):
         ignored = ['System Volume Information', '$RECYCLE.BIN']
-        return sorted([f"{symbol} {f[:32].capitalize()}" for f in listdir(repo) if f not in ignored and not f.endswith('.srt')])
+        return sorted([f"{symbol} {f[:32].capitalize()}" for f in listdir(repo) if f not in ignored and not f.endswith('.srt') and not f.startswith('.')])
 
     @bot.message_handler(commands=['list'])
     def list_files(message):
@@ -425,7 +426,7 @@ def mediagram():
             subtitles_interface, buffer = id_stack[-1][1], file_buffer
             lang = call.data[1:]
             logger.info(f"/selected_language: {lang}")
-            searcher = SubtitlesSearch(ost_user, ost_pass)
+            searcher = SubtitlesSearchV2(ost_user, ost_pass, ost_apikey)
             retry = 0
             while retry < 3:
                 retry += 1

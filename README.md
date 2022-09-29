@@ -105,6 +105,7 @@ Create .env file.
 sudo nano Mediagram/.env
 ```
 
+Create accounts: opensubtitles.org (V1) and opensubtitles.com (V2).
 Then paste the modified following lines:
 
 ```ini
@@ -117,6 +118,7 @@ QB_USER=<qbittorrent-account>
 QB_PASS=<password>
 OST_USER=<opensubtitles-account>
 OST_PASS=<password>
+OST_API_KEY=<api-key> (if V2)
 ```
 
 ## Run
