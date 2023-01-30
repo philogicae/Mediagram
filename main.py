@@ -1,5 +1,5 @@
 from os import getenv, uname, path, listdir, remove
-from shutil import rmtree, disk_usage
+from shutil import rmtree, disk_usage, copyfile
 from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
@@ -423,23 +423,24 @@ def mediagram():
     def callback_sub_download(call):
         if call.message.chat.id == chat_id:
             nonlocal id_stack, file_buffer
-            subtitles_interface, buffer = id_stack[-1][1], file_buffer
+            subtitles_interface = id_stack[-1][1]
             lang = call.data[1:]
+            flags = dict(eng="🇺🇸", fre="🇫🇷")
             logger.info(f"/selected_language: {lang}")
             searcher = SubtitlesSearchV2(ost_user, ost_pass, ost_apikey)
             retry = 0
             while retry < 3:
                 retry += 1
-                subtitles = searcher.query(buffer, lang)
+                subtitles = searcher.query(file_buffer, lang)
                 if subtitles:
                     break
                 sleep(1)
             if not subtitles:
-                text = f"🚫 No result for: {buffer}"
-                sub_info = {lang: buffer}
+                text = f"🚫 No result for: {file_buffer} {flags[lang]}"
+                sub_info = {lang: file_buffer}
                 logger.info(f"/no_subtitles_found: {sub_info}")
             else:
-                file = path.join(repo, buffer)
+                file = path.join(repo, file_buffer)
                 if path.isdir(file):
                     filepath, filename, size = file, '', 0
                     for f in listdir(filepath):
@@ -447,21 +448,48 @@ def mediagram():
                         if s > size:
                             filename, size = f, s
                     if size == 0:
-                        text = f"🚫 Empty directory error for: {buffer}"
+                        text = f"🚫 Empty directory error for: {file_buffer}"
                         logger.info(
                             f"/subtitles_empty_directory_error: {sub_info}")
                 else:
-                    filepath, filename = repo, buffer
+                    filepath, filename = repo, file_buffer
                 sub = subtitles[0]
                 sub_info = {lang: filename}
                 if searcher.download(sub, filename[:-4], filepath):
-                    text = f"✅ Subtitles added for: {filename}"
+                    text = f"✅ Subtitles added for: {filename} {flags[lang]}"
                     logger.info(f"/subtitles_added: {sub_info}")
                 else:
-                    text = f"🚫 Download error for: {filename}"
+                    text = f"🚫 Download error for: {filename} {flags[lang]}"
                     logger.info(f"/subtitles_download_error: {sub_info}")
             id_stack, file_buffer = [], ''
             bot.edit_message_text(text, chat_id, subtitles_interface)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('🖹'))
+    def callback_sub_copy(call):
+        if call.message.chat.id == chat_id:
+            nonlocal id_stack, file_buffer
+            subtitles_interface = id_stack[-1][1]
+            sub_file = call.data[1:]
+            copyfile(path.join(repo, file_buffer, "Subs", sub_file),
+                     path.join(repo, file_buffer, file_buffer) + ".srt")
+            text = f"✅ Subtitles copied for: {file_buffer} from {sub_file}"
+            logger.info(f"/subtitles_copied: {file_buffer} from {sub_file}")
+            id_stack, file_buffer = [], ''
+            bot.edit_message_text(text, chat_id, subtitles_interface)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('📁'))
+    def callback_sub_local(call):
+        if call.message.chat.id == chat_id:
+            text = f"🔈 Select .srt file for: {file_buffer}"
+            markup = types.InlineKeyboardMarkup()
+            for file in listdir(path.join(repo, file_buffer, "Subs")):
+                markup.add(types.InlineKeyboardButton(
+                    file, callback_data=f'🖹{file}'))
+            markup.add(types.InlineKeyboardButton(
+                'Cancel', callback_data='Cancel'))
+            bot.edit_message_text(
+                text, chat_id, id_stack[-1][1], reply_markup=markup)
+            logger.info('/subtitles_local')
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('💬'))
     def callback_sub_lang(call):
@@ -473,6 +501,10 @@ def mediagram():
             text = f"🔈 Select language for: {file_buffer}"
             markup = types.InlineKeyboardMarkup()
             row = []
+            file_path = path.join(repo, file_buffer)
+            if path.isdir(file_path) and path.isdir(path.join(file_path, "Subs")):
+                row.append(types.InlineKeyboardButton(
+                    "📁 From /Subs", callback_data="📁"))
             for lang, data in [('🇺🇸 English', '🔈eng'), ('🇫🇷 French', '🔈fre')]:
                 row.append(types.InlineKeyboardButton(
                     lang, callback_data=data))
