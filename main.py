@@ -1,5 +1,5 @@
 from os import getenv, uname, path, listdir, remove
-from shutil import rmtree, disk_usage, copyfile
+from shutil import rmtree, disk_usage, copyfile, move
 from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
@@ -160,10 +160,12 @@ def mediagram():
                 types.BotCommand("download", "🎬 Download"),
                 types.BotCommand("subtitles", "💬 Add subtitles"),
                 types.BotCommand("list", "🔍 List files"),
+                types.BotCommand("move", "🚚 Move file(s)"),
                 types.BotCommand("delete", "❌ Delete file(s)"),
                 types.BotCommand("help", "📝 Description"),
                 types.BotCommand("alive", "⚪ Health check"),
                 types.BotCommand("force", "♻️ Force media refresh"),
+                types.BotCommand("alt", "🔗 Mount alt dick"),
                 types.BotCommand("stop", "🔴 Kill the bot"),
                 types.BotCommand("restart", "🔵 Restart the bot"),
             ]
@@ -189,6 +191,13 @@ def mediagram():
             run("/media/refresh.sh", shell=True)
             bot.send_message(chat_id, "♻️ Force media refresh: Done.")
             logger.info("/force: media-refresh")
+
+    @bot.message_handler(commands=["alt"])
+    def alt(message):
+        if message.chat.id == chat_id:
+            run("/media/mount.sh", shell=True)
+            bot.send_message(chat_id, "🔗 Alt disk mounted: Done.")
+            logger.info("/alt: mounted")
 
     @bot.message_handler(commands=["stop", "restart"])
     def kill(message):
@@ -241,6 +250,17 @@ def mediagram():
         elif path.isdir(file):
             rmtree(file, ignore_errors=True)
             return True
+        return False
+
+    def move_to_alt(name):
+        file = path.join(repo, name)
+        if path.exists(file) and repo_alt:
+            file_alt = path.join(repo_alt, name)
+            try:
+                move(file, file_alt)
+                return True
+            except:
+                pass
         return False
 
     def download_manager(torrent_type, signal):
@@ -337,7 +357,10 @@ def mediagram():
 
     @bot.message_handler(
         func=lambda m: not list(
-            filter(lambda x: m.text.startswith(x), ["/", "magnet:?xt=", "🌐", "💬", "🔈"])
+            filter(
+                lambda x: m.text.startswith(x),
+                ["/", "magnet:?xt=", "🌐", "💬", "🔈", "❌", "🚚"],
+            )
         ),
         content_types=["text"],
     )
@@ -390,16 +413,21 @@ def mediagram():
     def get_disk_stats():
         usage = disk_usage(repo)
         total, used, free = [f"{v / 2**30:.1f}" for v in usage]
-        return f"📦 {used} / {total} Go 🟰 {free} Go 🚥"
+        result = f"📦 {used} / {total} Go 🟰 {free} Go 🚥"
+        if repo_alt:
+            usage = disk_usage(repo_alt)
+            total, used, free = [f"{v / 2**30:.1f}" for v in usage]
+            result += f"\n📦 {used} / {total} Go 🟰 {free} Go 🚥"
+        return result
 
-    def list_repo(symbol):
+    def list_repo(symbol, all=True):
         ignored = ["System Volume Information", "$RECYCLE.BIN"]
         files = [
             f"{symbol} {f[:32].capitalize()}"
             for f in listdir(repo)
             if f not in ignored and not f.endswith(".srt") and not f.startswith(".")
         ]
-        if repo_alt:
+        if repo_alt and all:
             files += [
                 f"{symbol} {f[:32].capitalize()}"
                 for f in listdir(repo_alt)
@@ -418,7 +446,7 @@ def mediagram():
             )
             logger.info(message.text)
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("🌐"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("❌"))
     def callback_delete(call):
         if call.message.chat.id == chat_id:
             file = [
@@ -435,11 +463,11 @@ def mediagram():
             if torrent:
                 qb.delete_torrent(torrent["hash"])
                 bot.edit_message_text(
-                    f"🌐 {file.capitalize()}\n🚫 Aborted.", chat_id, call.message.id
+                    f"❌ {file.capitalize()}\n🚫 Aborted.", chat_id, call.message.id
                 )
             elif delete_file(file):
                 bot.edit_message_text(
-                    f"🌐 {file.capitalize()}\n🗑 Deleted.", chat_id, call.message.id
+                    f"❌ {file.capitalize()}\n🗑 Deleted.", chat_id, call.message.id
                 )
                 logger.info(f"/deleted: '{file}'")
             nonlocal id_stack
@@ -449,7 +477,7 @@ def mediagram():
     def delete(message):
         if message.chat.id == chat_id:
             markup = types.InlineKeyboardMarkup()
-            for file in list_repo("🌐"):
+            for file in list_repo("❌"):
                 markup.add(types.InlineKeyboardButton(file, callback_data=file))
             markup.add(types.InlineKeyboardButton("Cancel", callback_data="Cancel"))
             msg = bot.send_message(
@@ -459,6 +487,36 @@ def mediagram():
             )
             id_stack.append(("delete_init", message.id))
             id_stack.append(("delete_select", msg.id))
+            logger.info(message.text)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("🚚"))
+    def callback_move(call):
+        if call.message.chat.id == chat_id:
+            file = [
+                f for f in listdir(repo) if f.capitalize().startswith(call.data[2:])
+            ][0]
+            if move_to_alt(file):
+                bot.edit_message_text(
+                    f"🚚 {file.capitalize()}\n🗑 Moved.", chat_id, call.message.id
+                )
+                logger.info(f"/moved: '{file}'")
+            nonlocal id_stack
+            id_stack = []
+
+    @bot.message_handler(commands=["move"])
+    def move(message):
+        if message.chat.id == chat_id:
+            markup = types.InlineKeyboardMarkup()
+            for file in list_repo("🚚", all=False):
+                markup.add(types.InlineKeyboardButton(file, callback_data=file))
+            markup.add(types.InlineKeyboardButton("Cancel", callback_data="Cancel"))
+            msg = bot.send_message(
+                chat_id,
+                f"🚚 Available files to move 🚚\n{get_disk_stats()}",
+                reply_markup=markup,
+            )
+            id_stack.append(("move_init", message.id))
+            id_stack.append(("move_select", msg.id))
             logger.info(message.text)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("🔈"))
