@@ -165,7 +165,7 @@ def mediagram():
                 types.BotCommand("help", "📝 Description"),
                 types.BotCommand("alive", "⚪ Health check"),
                 types.BotCommand("force", "♻️ Force media refresh"),
-                types.BotCommand("alt", "🔗 Mount alt disk"),
+                types.BotCommand("alt", "💽 Mount alt disk"),
                 types.BotCommand("stop", "🔴 Kill the bot"),
                 types.BotCommand("restart", "🔵 Restart the bot"),
             ]
@@ -196,7 +196,7 @@ def mediagram():
     def alt(message):
         if message.chat.id == chat_id:
             run("/media/mount.sh", shell=True)
-            bot.send_message(chat_id, "🔗 Alt disk mounted: Done.")
+            bot.send_message(chat_id, "💽 Alt disk mounted: Done.")
             logger.info("/alt: mounted")
 
     @bot.message_handler(commands=["stop", "restart"])
@@ -257,8 +257,7 @@ def mediagram():
         if path.exists(file) and repo_alt:
             file_alt = path.join(repo_alt, name)
             try:
-                movefile(file, file_alt)
-                return True
+                return movefile(file, file_alt) is not None
             except:
                 pass
         return False
@@ -422,23 +421,31 @@ def mediagram():
 
     def list_repo(symbol, all=True):
         ignored = ["System Volume Information", "$RECYCLE.BIN"]
-        files = [
-            f"{symbol} {f[:32].capitalize()}"
-            for f in listdir(repo)
-            if f not in ignored and not f.endswith(".srt") and not f.startswith(".")
-        ]
-        if repo_alt and all:
-            files += [
+        files = sorted(
+            [
                 f"{symbol} {f[:32].capitalize()}"
-                for f in listdir(repo_alt)
+                for f in listdir(repo)
                 if f not in ignored and not f.endswith(".srt") and not f.startswith(".")
             ]
-        return sorted(files)
+        )
+        if repo_alt and all:
+            if symbol == "💿":
+                symbol = "💽"
+            files += sorted(
+                [
+                    f"{symbol} {f[:32].capitalize()}"
+                    for f in listdir(repo_alt)
+                    if f not in ignored
+                    and not f.endswith(".srt")
+                    and not f.startswith(".")
+                ]
+            )
+        return files
 
     @bot.message_handler(commands=["list"])
     def list_files(message):
         if message.chat.id == chat_id:
-            files = "\n".join(list_repo("🌐"))
+            files = "\n".join(list_repo("💿"))
             bot.send_message(
                 chat_id,
                 f"💾 Available files 💾\n{get_disk_stats()}\n\n{files}",
@@ -500,6 +507,11 @@ def mediagram():
                     f"🚚 {file.capitalize()}\n🗑 Moved.", chat_id, call.message.id
                 )
                 logger.info(f"/moved: '{file}'")
+            else:
+                bot.edit_message_text(
+                    f"🚚 {file.capitalize()}\n🗑 Not moved.", chat_id, call.message.id
+                )
+                logger.info(f"/not-moved: '{file}'")
             nonlocal id_stack
             id_stack = []
 

@@ -41,7 +41,7 @@ Prefer NTFS file system: faster to read/write and supports larger files.
 
 ```bash
 # [Optional] Manually:
-sudo bash -c "echo 'sudo mount /dev/sda1 /media/mnt && echo \"/media/mnt: mounted.\"' > /media/mount.sh"
+sudo bash -c "echo 'sudo mount -o umask=0 /dev/sda1 /media/mnt && echo \"/media/mnt: mounted.\"' > /media/mount.sh"
 sudo bash -c "echo 'sudo umount /media/mnt && echo \"/media/mnt: unmounted.\"' > /media/umount.sh"
 sudo chmod +x /media/mount.sh
 sudo chmod +x /media/umount.sh
