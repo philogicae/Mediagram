@@ -112,6 +112,7 @@ Then paste the modified following lines:
 TELEGRAM_BOT_ID=<your-bot-id>
 TELEGRAM_CHAT_ID=<your-chat-id>
 DIR_PROD=<your-storage-directory-for-production>
+DIR_PROD_ALT=<alt-storage-directory-for-production>
 DIR_TEST=<your-storage-directory-for-test>
 QB_ADDR=<http://host:port>
 QB_USER=<qbittorrent-account>

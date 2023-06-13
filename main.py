@@ -17,6 +17,7 @@ load_dotenv()
 token = getenv("TELEGRAM_BOT_ID")
 chat_id = int(getenv("TELEGRAM_CHAT_ID"))
 dir_prod = getenv("DIR_PROD")
+dir_prod_alt = getenv("DIR_PROD_ALT")
 dir_test = getenv("DIR_TEST")
 qb_addr = getenv("QB_ADDR")
 qb_user = getenv("QB_USER")
@@ -27,11 +28,13 @@ ost_apikey = getenv("OST_API_KEY")
 
 # Platform
 repo = dir_test
+repo_alt = None
 LOG_MODE = DEBUG
 is_rpi = uname().machine == "aarch64"
 if is_rpi:
     run("/media/refresh.sh", shell=True)
     repo = dir_prod
+    repo_alt = dir_prod_alt
     LOG_MODE = INFO
 started = False
 killed = False
@@ -227,6 +230,8 @@ def mediagram():
 
     def delete_file(name):
         file = path.join(repo, name)
+        if not path.exists(file) and repo_alt:
+            file = path.join(repo_alt, name)
         srt = file[:-3] + "srt"
         if path.isfile(file):
             remove(file)
@@ -389,13 +394,18 @@ def mediagram():
 
     def list_repo(symbol):
         ignored = ["System Volume Information", "$RECYCLE.BIN"]
-        return sorted(
-            [
+        files = [
+            f"{symbol} {f[:32].capitalize()}"
+            for f in listdir(repo)
+            if f not in ignored and not f.endswith(".srt") and not f.startswith(".")
+        ]
+        if repo_alt:
+            files += [
                 f"{symbol} {f[:32].capitalize()}"
-                for f in listdir(repo)
+                for f in listdir(repo_alt)
                 if f not in ignored and not f.endswith(".srt") and not f.startswith(".")
             ]
-        )
+        return sorted(files)
 
     @bot.message_handler(commands=["list"])
     def list_files(message):
@@ -413,7 +423,14 @@ def mediagram():
         if call.message.chat.id == chat_id:
             file = [
                 f for f in listdir(repo) if f.capitalize().startswith(call.data[2:])
-            ][0]
+            ]
+            if repo_alt:
+                file += [
+                    f
+                    for f in listdir(repo_alt)
+                    if f.capitalize().startswith(call.data[2:])
+                ]
+            file = file[0]
             torrent = qb.get_torrent(name=file)
             if torrent:
                 qb.delete_torrent(torrent["hash"])
