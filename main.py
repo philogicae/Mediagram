@@ -1,5 +1,5 @@
 from os import getenv, uname, path, listdir, remove
-from shutil import rmtree, disk_usage, copyfile, move
+from shutil import rmtree, disk_usage, copyfile, move as movefile
 from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
@@ -165,7 +165,7 @@ def mediagram():
                 types.BotCommand("help", "📝 Description"),
                 types.BotCommand("alive", "⚪ Health check"),
                 types.BotCommand("force", "♻️ Force media refresh"),
-                types.BotCommand("alt", "🔗 Mount alt dick"),
+                types.BotCommand("alt", "🔗 Mount alt disk"),
                 types.BotCommand("stop", "🔴 Kill the bot"),
                 types.BotCommand("restart", "🔵 Restart the bot"),
             ]
@@ -257,7 +257,7 @@ def mediagram():
         if path.exists(file) and repo_alt:
             file_alt = path.join(repo_alt, name)
             try:
-                move(file, file_alt)
+                movefile(file, file_alt)
                 return True
             except:
                 pass
