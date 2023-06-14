@@ -550,7 +550,9 @@ def mediagram():
                 sub_info = {lang: file_buffer}
                 logger.info(f"/no_subtitles_found: {sub_info}")
             else:
-                file = path.join(repo, file_buffer)
+                file, temp_repo = path.join(repo, file_buffer), repo
+                if not path.exists(file) and repo_alt:
+                    file, temp_repo = path.join(repo_alt, file_buffer), repo_alt
                 if path.isdir(file):
                     filepath, filename, size = file, "", 0
                     for f in listdir(filepath):
@@ -561,7 +563,7 @@ def mediagram():
                         text = f"🚫 Empty directory error for: {file_buffer}"
                         logger.info(f"/subtitles_empty_directory_error: {sub_info}")
                 else:
-                    filepath, filename = repo, file_buffer
+                    filepath, filename = temp_repo, file_buffer
                 sub = subtitles[0]
                 sub_info = {lang: filename}
                 if searcher.download(sub, filename[:-4], filepath):
@@ -579,10 +581,12 @@ def mediagram():
             nonlocal id_stack, file_buffer
             subtitles_interface = id_stack[-1][1]
             sub_file = call.data[1:]
-            copyfile(
-                path.join(repo, file_buffer, "Subs", sub_file),
-                path.join(repo, file_buffer, file_buffer) + ".srt",
-            )
+            src = path.join(repo, file_buffer, "Subs", sub_file)
+            dst = path.join(repo, file_buffer, file_buffer) + ".srt"
+            if not path.exists(src) and repo_alt:
+                src = path.join(repo_alt, file_buffer, "Subs", sub_file)
+                dst = path.join(repo_alt, file_buffer, file_buffer) + ".srt"
+            copyfile(src, dst)
             text = f"✅ Subtitles copied for: {file_buffer} from {sub_file}"
             logger.info(f"/subtitles_copied: {file_buffer} from {sub_file}")
             id_stack, file_buffer = [], ""
@@ -593,7 +597,10 @@ def mediagram():
         if call.message.chat.id == chat_id:
             text = f"🔈 Select .srt file for: {file_buffer}"
             markup = types.InlineKeyboardMarkup()
-            for file in listdir(path.join(repo, file_buffer, "Subs")):
+            file_path = path.join(repo, file_buffer, "Subs")
+            if not path.exists(file_path) and repo_alt:
+                file_path = path.join(repo_alt, file_buffer, "Subs")
+            for file in listdir(file_path):
                 markup.add(types.InlineKeyboardButton(file, callback_data=f"🖹{file}"))
             markup.add(types.InlineKeyboardButton("Cancel", callback_data="Cancel"))
             bot.edit_message_text(text, chat_id, id_stack[-1][1], reply_markup=markup)
@@ -605,12 +612,21 @@ def mediagram():
             nonlocal file_buffer
             file_buffer = [
                 f for f in listdir(repo) if f.capitalize().startswith(call.data[2:])
-            ][0]
+            ]
+            if repo_alt:
+                file_buffer += [
+                    f
+                    for f in listdir(repo_alt)
+                    if f.capitalize().startswith(call.data[2:])
+                ]
+            file_buffer = file_buffer[0]
             logger.info(f"/selected_for_subtitles: {file_buffer}")
             text = f"🔈 Select language for: {file_buffer}"
             markup = types.InlineKeyboardMarkup()
             row = []
             file_path = path.join(repo, file_buffer)
+            if not path.exists(file_path) and repo_alt:
+                file_path = path.join(repo_alt, file_buffer)
             if path.isdir(file_path) and path.isdir(path.join(file_path, "Subs")):
                 row.append(
                     types.InlineKeyboardButton("📁 From /Subs", callback_data="📁")
