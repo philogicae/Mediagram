@@ -1,5 +1,5 @@
 from os import getenv, uname, path, listdir, remove
-from shutil import rmtree, disk_usage, copyfile
+from shutil import rmtree, disk_usage, copyfile, copytree
 from subprocess import run
 from threading import Thread, Event
 from time import time as now, sleep
@@ -256,8 +256,14 @@ def mediagram():
         src = path.join(repo, name)
         if path.exists(src) and repo_alt:
             dst = path.join(repo_alt, name)
-            copyfile(src, dst)
-            return delete_file(name)
+            try:
+                if path.isdir(src):
+                    copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    copyfile(src, dst)
+                return delete_file(name)
+            except:
+                pass
         return False
 
     def download_manager(torrent_type, signal):
