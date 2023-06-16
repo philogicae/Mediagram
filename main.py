@@ -261,7 +261,7 @@ def mediagram():
                     copytree(src, dst, dirs_exist_ok=True)
                 else:
                     copyfile(src, dst)
-                return delete_file(name)
+                # return delete_file(name)
             except:
                 pass
         return False
@@ -506,7 +506,8 @@ def mediagram():
             file = [
                 f for f in listdir(repo) if f.capitalize().startswith(call.data[2:])
             ][0]
-            if move_to_alt(file):
+            move_to_alt(file)
+            if path.exists(repo_alt + file):
                 bot.edit_message_text(
                     f"🚚 {file.capitalize()}\n🗑 Moved.", chat_id, call.message.id
                 )
