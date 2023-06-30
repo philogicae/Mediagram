@@ -8,7 +8,7 @@ from logging import basicConfig, getLogger, INFO, DEBUG
 from rich.logging import RichHandler
 from telebot import TeleBot, types
 from qbittorrent import Client
-from plugins import TorrentSearch, SubtitlesSearchV2
+from plugins import TorrentSearch, SubtitlesSearchV2, get_public_ip
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -198,6 +198,15 @@ def mediagram():
             run("/media/mount.sh", shell=True)
             bot.send_message(chat_id, "💽 Alt disk mounted: Done.")
             logger.info("/alt: mounted")
+
+    @bot.message_handler(commands=["ip"])
+    def get_ip(message):
+        if message.chat.id == chat_id:
+            ip = get_public_ip()
+            if not ip:
+                ip = "Error when checking IP."
+            bot.send_message(chat_id, ip)
+            logger.info(f"/ip: {ip}")
 
     @bot.message_handler(commands=["stop", "restart"])
     def kill(message):
