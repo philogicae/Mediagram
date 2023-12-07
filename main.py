@@ -1,6 +1,6 @@
 from os import getenv, uname, path, listdir, remove
 from shutil import rmtree, disk_usage, copyfile, copytree
-from subprocess import run
+from subprocess import run, Popen
 from threading import Thread, Event
 from time import time as now, sleep
 from datetime import datetime as dt
@@ -66,7 +66,7 @@ class QBittorrent:
     qb = None
 
     def start(self):
-        run("sudo systemctl start qbittorrent-nox", shell=True)
+        Popen("qbittorrent-nox", shell=True)
         logger.info("qBittorrent - starting...")
         sleep(2)
 

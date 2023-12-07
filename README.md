@@ -8,7 +8,7 @@ Made to be hosted on Raspberry Pi 4b.
 ```bash
 sudo apt update -y
 sudo apt full-upgrade -y
-sudo apt install ntfs-3g exfat-fuse exfat-utils minidlna qbittorrent-nox tmux -y
+sudo apt install ntfs-3g exfat-fuse minidlna qbittorrent-nox tmux -y
 ```
 
 ## 2) Media server (MiniDLNA)
