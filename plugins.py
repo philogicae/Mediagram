@@ -2,6 +2,7 @@ from pythonopensubtitles.opensubtitles import OpenSubtitles
 from opensubtitles_v2 import OpenSubtitlesV2
 from rarbgapi import RarbgAPI
 import subprocess
+import json
 
 
 class SubtitlesSearch:
@@ -85,9 +86,15 @@ class TorrentSearch:
 
 def get_public_ip():
     try:
-        return subprocess.run(
+        ipv4 = json.loads(
+            subprocess.run(
+                ["curl", "ipinfo.io"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+        ).get("ip")
+        ipv6 = subprocess.run(
             ["curl", "ifconfig.me"], capture_output=True, text=True, check=True
         ).stdout.strip()
+        return f"IPv4: {ipv4}\nIPv6: {ipv6}"
     except:
         pass
 
